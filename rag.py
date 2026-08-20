@@ -1,6 +1,6 @@
 import os
 import chromadb
-from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding
 from dotenv import load_dotenv
 from google import genai
 
@@ -11,7 +11,7 @@ if not api_key:
     raise ValueError("GEMINI_API_KEY not found — check your .env file")
 
 client = genai.Client(api_key=api_key)
-model = SentenceTransformer('all-MiniLM-L6-v2')
+model = TextEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
 
 def build_collection(chunks, collection_name="pdf_chunks", persist_dir="./chroma_db"):
@@ -21,14 +21,14 @@ def build_collection(chunks, collection_name="pdf_chunks", persist_dir="./chroma
     except Exception:
         pass
     collection = chroma_client.create_collection(collection_name)
-    embeddings = model.encode(chunks).tolist()
+    embeddings = [e.tolist() for e in model.embed(chunks)]
     ids = [f"chunk_{i}" for i in range(len(chunks))]
     collection.add(ids=ids, embeddings=embeddings, documents=chunks)
     return collection
 
 
 def answer_question(collection, question, top_k=3):
-    query_embedding = model.encode([question]).tolist()
+    query_embedding = [e.tolist() for e in model.embed([question])]
     results = collection.query(query_embeddings=query_embedding, n_results=top_k)
     retrieved_chunks = results["documents"][0]
     context = "\n\n".join(retrieved_chunks)
@@ -52,7 +52,7 @@ Answer:"""
 
 def generate_answer(prompt):
     response = client.models.generate_content(
-        model="gemini-3.5-flash-lite",
+        model="gemini-3.6-flash",
         contents=prompt
     )
     return response.text
