@@ -1,15 +1,26 @@
+import os
 import chromadb
 from sentence_transformers import SentenceTransformer
+from dotenv import load_dotenv
+from google import genai
 
+load_dotenv()
+
+api_key = os.getenv("GEMINI_API_KEY")
+if not api_key:
+    raise ValueError("GEMINI_API_KEY not found — check your .env file")
+
+client = genai.Client(api_key=api_key)
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
+
 def build_collection(chunks, collection_name="pdf_chunks", persist_dir="./chroma_db"):
-    client = chromadb.PersistentClient(path=persist_dir)
+    chroma_client = chromadb.PersistentClient(path=persist_dir)
     try:
-        client.delete_collection(collection_name)
+        chroma_client.delete_collection(collection_name)
     except Exception:
         pass
-    collection = client.create_collection(collection_name)
+    collection = chroma_client.create_collection(collection_name)
     embeddings = model.encode(chunks).tolist()
     ids = [f"chunk_{i}" for i in range(len(chunks))]
     collection.add(ids=ids, embeddings=embeddings, documents=chunks)
@@ -25,8 +36,8 @@ def answer_question(collection, question, top_k=3):
 
 
 def build_prompt(context, question):
-    prompt = f"""Answer the question using ONLY the context below. 
-Do not use any outside knowledge. 
+    prompt = f"""Answer the question using ONLY the context below.
+Do not use any outside knowledge.
 If the answer is not found in the context, say "I couldn't find this in the document."
 
 Context:
@@ -37,3 +48,11 @@ Question:
 
 Answer:"""
     return prompt
+
+
+def generate_answer(prompt):
+    response = client.models.generate_content(
+        model="gemini-3.5-flash-lite",
+        contents=prompt
+    )
+    return response.text
